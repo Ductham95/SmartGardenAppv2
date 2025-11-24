@@ -20,7 +20,7 @@ class MainActivity : ComponentActivity() {
             SmartGardenTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     Greeting(
-                        name = "Smart Gardenv2",
+                        name = "Smart Gardenv3",
                         modifier = Modifier.padding(innerPadding)
                     )
                 }
