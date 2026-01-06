@@ -344,4 +344,102 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             apply()
         }
     }
+    
+    // --- Quản lý lịch tưới ---
+    
+    // Lấy danh sách lịch tưới từ ThingsBoard
+    fun fetchWateringSchedules() {
+        if (authToken == null) return
+        
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val response = RetrofitClient.instance.getSharedAttributes(
+                    token = "Bearer $authToken",
+                    deviceId = DEVICE_ID,
+                    keys = "wateringSchedules"
+                )
+                
+                if (response.isSuccessful && response.body() != null) {
+                    val data = response.body()!!
+                    if (data.has("wateringSchedules")) {
+                        val jsonArray = data.getAsJsonArray("wateringSchedules")
+                        if (jsonArray.size() > 0) {
+                            val jsonString = jsonArray[0].asJsonObject.get("value").asString
+                            val schedules = WateringSchedule.listFromJson(jsonString)
+                            _uiState.value = _uiState.value.copy(wateringSchedules = schedules)
+                            Log.d("ViewModel", "Loaded ${schedules.size} watering schedules")
+                        }
+                    }
+                } else {
+                    Log.e("ViewModel", "Failed to fetch schedules: ${response.code()}")
+                }
+            } catch (e: Exception) {
+                Log.e("ViewModel", "Error fetching schedules: ${e.message}", e)
+            }
+        }
+    }
+    
+    // Lưu danh sách lịch tưới lên ThingsBoard
+    private fun saveSchedulesToThingsBoard(schedules: List<WateringSchedule>) {
+        if (authToken == null) return
+        
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val jsonObject = com.google.gson.JsonObject()
+                jsonObject.addProperty("wateringSchedules", WateringSchedule.listToJson(schedules))
+                
+                val response = RetrofitClient.instance.updateSharedAttributes(
+                    token = "Bearer $authToken",
+                    deviceId = DEVICE_ID,
+                    attributes = jsonObject
+                )
+                
+                if (response.isSuccessful) {
+                    Log.d("ViewModel", "Schedules saved successfully")
+                } else {
+                    Log.e("ViewModel", "Failed to save schedules: ${response.code()}")
+                }
+            } catch (e: Exception) {
+                Log.e("ViewModel", "Error saving schedules: ${e.message}", e)
+            }
+        }
+    }
+    
+    // Thêm lịch tưới mới
+    fun addWateringSchedule(schedule: WateringSchedule) {
+        val currentSchedules = _uiState.value.wateringSchedules.toMutableList()
+        currentSchedules.add(schedule)
+        _uiState.value = _uiState.value.copy(wateringSchedules = currentSchedules)
+        saveSchedulesToThingsBoard(currentSchedules)
+    }
+    
+    // Cập nhật lịch tưới
+    fun updateWateringSchedule(schedule: WateringSchedule) {
+        val currentSchedules = _uiState.value.wateringSchedules.toMutableList()
+        val index = currentSchedules.indexOfFirst { it.id == schedule.id }
+        if (index >= 0) {
+            currentSchedules[index] = schedule
+            _uiState.value = _uiState.value.copy(wateringSchedules = currentSchedules)
+            saveSchedulesToThingsBoard(currentSchedules)
+        }
+    }
+    
+    // Xóa lịch tưới
+    fun deleteWateringSchedule(scheduleId: String) {
+        val currentSchedules = _uiState.value.wateringSchedules.toMutableList()
+        currentSchedules.removeAll { it.id == scheduleId }
+        _uiState.value = _uiState.value.copy(wateringSchedules = currentSchedules)
+        saveSchedulesToThingsBoard(currentSchedules)
+    }
+    
+    // Bật/tắt lịch tưới
+    fun toggleScheduleEnabled(scheduleId: String, enabled: Boolean) {
+        val currentSchedules = _uiState.value.wateringSchedules.toMutableList()
+        val index = currentSchedules.indexOfFirst { it.id == scheduleId }
+        if (index >= 0) {
+            currentSchedules[index] = currentSchedules[index].copy(isEnabled = enabled)
+            _uiState.value = _uiState.value.copy(wateringSchedules = currentSchedules)
+            saveSchedulesToThingsBoard(currentSchedules)
+        }
+    }
 }

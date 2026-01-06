@@ -31,4 +31,20 @@ interface ThingsBoardApi {
         @Query("endTs") endTs: Long,
         @Query("limit") limit: Int = 100
     ): Response<JsonObject>
+    
+    // Lấy Shared Attributes (cấu hình)
+    @GET("/api/plugins/telemetry/DEVICE/{deviceId}/values/attributes/SHARED_SCOPE")
+    suspend fun getSharedAttributes(
+        @Header("X-Authorization") token: String,
+        @Path("deviceId") deviceId: String,
+        @Query("keys") keys: String
+    ): Response<JsonObject>
+    
+    // Cập nhật Shared Attributes
+    @POST("/api/plugins/telemetry/DEVICE/{deviceId}/attributes/SHARED_SCOPE")
+    suspend fun updateSharedAttributes(
+        @Header("X-Authorization") token: String,
+        @Path("deviceId") deviceId: String,
+        @Body attributes: JsonObject
+    ): Response<Unit>
 }

@@ -12,7 +12,8 @@ data class GardenState(
     val temperatureHistory: List<SensorDataPoint> = emptyList(),
     val humidityHistory: List<SensorDataPoint> = emptyList(),
     val alertSettings: AlertSettings = AlertSettings(),
-    val activeAlerts: List<AlertType> = emptyList()
+    val activeAlerts: List<AlertType> = emptyList(),
+    val wateringSchedules: List<WateringSchedule> = emptyList()
 )
 
 // Data class cho lịch sử dữ liệu cảm biến
