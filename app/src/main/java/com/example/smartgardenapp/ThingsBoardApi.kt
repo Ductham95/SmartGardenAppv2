@@ -8,6 +8,7 @@ import retrofit2.http.Path
 import retrofit2.http.GET
 import retrofit2.http.Query
 import com.example.smartgardenapp.LoginResponse
+import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 
 
@@ -38,8 +39,8 @@ interface ThingsBoardApi {
         @Header("X-Authorization") token: String,
         @Path("deviceId") deviceId: String,
         @Query("keys") keys: String
-    ): Response<JsonObject>
-    
+    ): Response<JsonArray>
+
     // Cập nhật Shared Attributes
     @POST("/api/plugins/telemetry/DEVICE/{deviceId}/attributes/SHARED_SCOPE")
     suspend fun updateSharedAttributes(

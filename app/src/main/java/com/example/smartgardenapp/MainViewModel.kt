@@ -361,10 +361,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 
                 if (response.isSuccessful && response.body() != null) {
                     val data = response.body()!!
-                    if (data.has("wateringSchedules")) {
-                        val jsonArray = data.getAsJsonArray("wateringSchedules")
-                        if (jsonArray.size() > 0) {
-                            val jsonString = jsonArray[0].asJsonObject.get("value").asString
+                    if (data.size() > 0) {
+                        // API trả về JsonArray, mỗi phần tử có key và value
+                        val item = data[0].asJsonObject
+                        if (item.has("value")) {
+                            val jsonString = item.get("value").asString
                             val schedules = WateringSchedule.listFromJson(jsonString)
                             _uiState.value = _uiState.value.copy(wateringSchedules = schedules)
                             Log.d("ViewModel", "Loaded ${schedules.size} watering schedules")
