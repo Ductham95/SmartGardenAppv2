@@ -9,6 +9,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.smartgarden.DashboardScreen
+import com.example.smartgarden.HistoryChartScreen
 import com.example.smartgarden.LoginScreen
 import com.example.smartgardenapp.ui.theme.SmartGardenTheme
 
@@ -26,7 +27,10 @@ class MainActivity : ComponentActivity() {
                         LoginScreen(viewModel = mainViewModel, navController = navController)
                     }
                     composable("dashboard") {
-                        DashboardScreen(viewModel = mainViewModel)
+                        DashboardScreen(viewModel = mainViewModel, navController = navController)
+                    }
+                    composable("history") {
+                        HistoryChartScreen(viewModel = mainViewModel, navController = navController)
                     }
                 }
             }

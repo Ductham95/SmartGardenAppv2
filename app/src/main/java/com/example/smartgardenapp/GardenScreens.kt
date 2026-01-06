@@ -28,8 +28,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.example.smartgardenapp.MainViewModel
+import com.example.smartgardenapp.SensorDataPoint
 import com.example.smartgardenapp.ui.components.*
 import com.example.smartgardenapp.ui.theme.*
+import com.patrykandpatrick.vico.compose.axis.horizontal.rememberBottomAxis
+import com.patrykandpatrick.vico.compose.axis.vertical.rememberStartAxis
+import com.patrykandpatrick.vico.compose.chart.Chart
+import com.patrykandpatrick.vico.compose.chart.line.lineChart
+import com.patrykandpatrick.vico.core.entry.entryModelOf
+import com.patrykandpatrick.vico.core.entry.entryOf
+import java.text.SimpleDateFormat
+import java.util.*
 
 // --- MÀN HÌNH LOGIN ---
 @Composable
@@ -272,7 +281,7 @@ fun LoginScreen(viewModel: MainViewModel, navController: NavController) {
 
 // --- MÀN HÌNH DASHBOARD ---
 @Composable
-fun DashboardScreen(viewModel: MainViewModel) {
+fun DashboardScreen(viewModel: MainViewModel, navController: NavController) {
     val state by viewModel.uiState.collectAsState()
 
     // Animation for content
@@ -377,13 +386,40 @@ fun DashboardScreen(viewModel: MainViewModel) {
             Spacer(modifier = Modifier.height(24.dp))
 
             // Sensor Cards Grid
-            Text(
-                text = "Thông số cảm biến",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = TextPrimary,
-                modifier = Modifier.padding(bottom = 16.dp)
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Thông số cảm biến",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = TextPrimary
+                )
+                
+                // History button
+                IconButton(
+                    onClick = { navController.navigate("history") },
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(
+                            brush = Brush.linearGradient(
+                                colors = listOf(GradientGreenStart, GradientGreenEnd)
+                            ),
+                            shape = CircleShape
+                        )
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.History,
+                        contentDescription = "Xem lịch sử",
+                        tint = TextLight,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
 
             AnimatedVisibility(
                 visible = visible,
@@ -535,5 +571,388 @@ fun DashboardScreen(viewModel: MainViewModel) {
 
             Spacer(modifier = Modifier.height(24.dp))
         }
+    }
+}
+
+// --- MÀN HÌNH XEM BIỂU ĐỒ LỊCH SỬ ---
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun HistoryChartScreen(viewModel: MainViewModel, navController: NavController) {
+    val state by viewModel.uiState.collectAsState()
+    
+    // Fetch history data when screen is opened
+    LaunchedEffect(Unit) {
+        viewModel.fetchSensorHistory()
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { 
+                    Text(
+                        "Lịch sử nhiệt độ & độ ẩm",
+                        fontWeight = FontWeight.Bold
+                    ) 
+                },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Quay lại")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = GreenPrimary,
+                    titleContentColor = TextLight,
+                    navigationIconContentColor = TextLight
+                )
+            )
+        }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            BackgroundLight,
+                            CardGreen.copy(alpha = 0.2f)
+                        )
+                    )
+                )
+                .padding(paddingValues)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp)
+        ) {
+            // Temperature Chart Card
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .shadow(8.dp, RoundedCornerShape(20.dp)),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = SurfaceLight)
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .background(
+                                    color = TemperatureColor.copy(alpha = 0.15f),
+                                    shape = CircleShape
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Thermostat,
+                                contentDescription = null,
+                                tint = TemperatureColor,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "Nhiệt độ",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary
+                            )
+                            Text(
+                                text = "24 giờ qua",
+                                fontSize = 13.sp,
+                                color = TextSecondary
+                            )
+                        }
+                    }
+                    
+                    if (state.temperatureHistory.isNotEmpty()) {
+                        TemperatureChart(data = state.temperatureHistory)
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(200.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                CircularProgressIndicator(
+                                    color = TemperatureColor,
+                                    modifier = Modifier.size(40.dp)
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(
+                                    text = "Đang tải dữ liệu...",
+                                    color = TextSecondary,
+                                    fontSize = 14.sp
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // Humidity Chart Card
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .shadow(8.dp, RoundedCornerShape(20.dp)),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = SurfaceLight)
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .background(
+                                    color = HumidityColor.copy(alpha = 0.15f),
+                                    shape = CircleShape
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Cloud,
+                                contentDescription = null,
+                                tint = HumidityColor,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "Độ ẩm không khí",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary
+                            )
+                            Text(
+                                text = "24 giờ qua",
+                                fontSize = 13.sp,
+                                color = TextSecondary
+                            )
+                        }
+                    }
+                    
+                    if (state.humidityHistory.isNotEmpty()) {
+                        HumidityChart(data = state.humidityHistory)
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(200.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                CircularProgressIndicator(
+                                    color = HumidityColor,
+                                    modifier = Modifier.size(40.dp)
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(
+                                    text = "Đang tải dữ liệu...",
+                                    color = TextSecondary,
+                                    fontSize = 14.sp
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // Statistics Card
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .shadow(8.dp, RoundedCornerShape(20.dp)),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = SurfaceLight)
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp)
+                ) {
+                    Text(
+                        text = "Thống kê",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary,
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+                    
+                    if (state.temperatureHistory.isNotEmpty()) {
+                        val avgTemp = state.temperatureHistory.map { it.value }.average().toFloat()
+                        val maxTemp = state.temperatureHistory.maxOf { it.value }
+                        val minTemp = state.temperatureHistory.minOf { it.value }
+                        
+                        StatisticRow(
+                            icon = Icons.Default.Thermostat,
+                            label = "Nhiệt độ TB",
+                            value = String.format("%.1f°C", avgTemp),
+                            color = TemperatureColor
+                        )
+                        StatisticRow(
+                            icon = Icons.Default.ArrowUpward,
+                            label = "Nhiệt độ cao nhất",
+                            value = String.format("%.1f°C", maxTemp),
+                            color = TemperatureColor
+                        )
+                        StatisticRow(
+                            icon = Icons.Default.ArrowDownward,
+                            label = "Nhiệt độ thấp nhất",
+                            value = String.format("%.1f°C", minTemp),
+                            color = TemperatureColor
+                        )
+                    }
+                    
+                    if (state.humidityHistory.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Divider(color = TextMuted.copy(alpha = 0.3f))
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        val avgHum = state.humidityHistory.map { it.value }.average().toFloat()
+                        val maxHum = state.humidityHistory.maxOf { it.value }
+                        val minHum = state.humidityHistory.minOf { it.value }
+                        
+                        StatisticRow(
+                            icon = Icons.Default.Cloud,
+                            label = "Độ ẩm TB",
+                            value = String.format("%.0f%%", avgHum),
+                            color = HumidityColor
+                        )
+                        StatisticRow(
+                            icon = Icons.Default.ArrowUpward,
+                            label = "Độ ẩm cao nhất",
+                            value = String.format("%.0f%%", maxHum),
+                            color = HumidityColor
+                        )
+                        StatisticRow(
+                            icon = Icons.Default.ArrowDownward,
+                            label = "Độ ẩm thấp nhất",
+                            value = String.format("%.0f%%", minHum),
+                            color = HumidityColor
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+    }
+}
+
+@Composable
+fun TemperatureChart(data: List<SensorDataPoint>) {
+    if (data.isEmpty()) return
+    
+    val chartEntryModel = entryModelOf(
+        data.mapIndexed { index, point ->
+            entryOf(index.toFloat(), point.value)
+        }
+    )
+    
+    Chart(
+        chart = lineChart(),
+        model = chartEntryModel,
+        startAxis = rememberStartAxis(
+            title = "°C"
+        ),
+        bottomAxis = rememberBottomAxis(
+            valueFormatter = { value, _ ->
+                val index = value.toInt()
+                if (index in data.indices) {
+                    val date = Date(data[index].timestamp)
+                    SimpleDateFormat("HH:mm", Locale.getDefault()).format(date)
+                } else ""
+            }
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(250.dp)
+    )
+}
+
+@Composable
+fun HumidityChart(data: List<SensorDataPoint>) {
+    if (data.isEmpty()) return
+    
+    val chartEntryModel = entryModelOf(
+        data.mapIndexed { index, point ->
+            entryOf(index.toFloat(), point.value)
+        }
+    )
+    
+    Chart(
+        chart = lineChart(),
+        model = chartEntryModel,
+        startAxis = rememberStartAxis(
+            title = "%"
+        ),
+        bottomAxis = rememberBottomAxis(
+            valueFormatter = { value, _ ->
+                val index = value.toInt()
+                if (index in data.indices) {
+                    val date = Date(data[index].timestamp)
+                    SimpleDateFormat("HH:mm", Locale.getDefault()).format(date)
+                } else ""
+            }
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(250.dp)
+    )
+}
+
+@Composable
+fun StatisticRow(
+    icon: ImageVector,
+    label: String,
+    value: String,
+    color: Color
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = color,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Text(
+                text = label,
+                fontSize = 15.sp,
+                color = TextSecondary
+            )
+        }
+        Text(
+            text = value,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = TextPrimary
+        )
     }
 }

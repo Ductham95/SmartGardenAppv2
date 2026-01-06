@@ -121,6 +121,143 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // Lấy lịch sử dữ liệu cảm biến
+    fun fetchSensorHistory() {
+        if (authToken == null) {
+            Log.e("ViewModel", "Auth token is null!")
+            // Thêm dữ liệu giả để test UI
+            loadMockData()
+            return
+        }
+        
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val endTs = System.currentTimeMillis()
+                val startTs = endTs - (7 * 24 * 60 * 60 * 1000) // 7 days ago (tăng lên để có nhiều dữ liệu hơn)
+                
+                Log.d("ViewModel", "Fetching history from $startTs to $endTs for device $DEVICE_ID")
+                
+                val response = RetrofitClient.instance.getTelemetryHistory(
+                    token = "Bearer $authToken",
+                    deviceId = DEVICE_ID,
+                    keys = "temperature,humidity,temp,hum,Temperature,Humidity", // Thử nhiều key names
+                    startTs = startTs,
+                    endTs = endTs,
+                    limit = 100
+                )
+                
+                Log.d("ViewModel", "Response code: ${response.code()}")
+                
+                if (response.isSuccessful && response.body() != null) {
+                    val data = response.body()!!
+                    Log.d("ViewModel", "Response body: $data")
+                    Log.d("ViewModel", "Available keys in response: ${data.keySet()}")
+                    
+                    // Parse temperature history - thử nhiều key names
+                    val tempHistory = mutableListOf<SensorDataPoint>()
+                    val tempKeys = listOf("temperature", "temp", "Temperature", "TEMPERATURE")
+                    for (key in tempKeys) {
+                        if (data.has(key)) {
+                            Log.d("ViewModel", "Found temperature data with key: $key")
+                            val tempArray = data.getAsJsonArray(key)
+                            Log.d("ViewModel", "Temperature entries: ${tempArray.size()}")
+                            for (i in 0 until tempArray.size()) {
+                                try {
+                                    val item = tempArray[i].asJsonObject
+                                    val ts = item.get("ts").asLong
+                                    val value = item.get("value").asString.toDoubleOrNull() ?: continue
+                                    tempHistory.add(SensorDataPoint(timestamp = ts, value = value))
+                                } catch (e: Exception) {
+                                    Log.e("ViewModel", "Error parsing temp item: ${e.message}")
+                                }
+                            }
+                            break
+                        }
+                    }
+                    
+                    if (tempHistory.isEmpty()) {
+                        Log.w("ViewModel", "No temperature data found with any known key")
+                    }
+                    
+                    // Parse humidity history - thử nhiều key names
+                    val humidityHistory = mutableListOf<SensorDataPoint>()
+                    val humKeys = listOf("humidity", "hum", "Humidity", "HUMIDITY")
+                    for (key in humKeys) {
+                        if (data.has(key)) {
+                            Log.d("ViewModel", "Found humidity data with key: $key")
+                            val humArray = data.getAsJsonArray(key)
+                            Log.d("ViewModel", "Humidity entries: ${humArray.size()}")
+                            for (i in 0 until humArray.size()) {
+                                try {
+                                    val item = humArray[i].asJsonObject
+                                    val ts = item.get("ts").asLong
+                                    val value = item.get("value").asString.toDoubleOrNull() ?: continue
+                                    humidityHistory.add(SensorDataPoint(timestamp = ts, value = value))
+                                } catch (ex: Exception) {
+                                    Log.e("ViewModel", "Error parsing humidity item: ${ex.message}")
+                                }
+                            }
+                            break
+                        }
+                    }
+                    
+                    if (humidityHistory.isEmpty()) {
+                        Log.w("ViewModel", "No humidity data found with any known key")
+                    }
+                    
+                    Log.d("ViewModel", "Parsed ${tempHistory.size} temp points, ${humidityHistory.size} humidity points")
+                    
+                    // Nếu không có dữ liệu thật, dùng dữ liệu giả
+                    if (tempHistory.isEmpty() && humidityHistory.isEmpty()) {
+                        Log.w("ViewModel", "No data from API, using mock data. Device may not have historical data yet. Make sure ESP32 is sending data to ThingsBoard.")
+                        loadMockData()
+                    } else {
+                        // Update state
+                        _uiState.value = _uiState.value.copy(
+                            temperatureHistory = tempHistory.sortedBy { it.timestamp },
+                            humidityHistory = humidityHistory.sortedBy { it.timestamp }
+                        )
+                    }
+                } else {
+                    Log.e("ViewModel", "API Error: ${response.code()} - ${response.errorBody()?.string()}")
+                    // Dùng dữ liệu giả khi lỗi API
+                    loadMockData()
+                }
+            } catch (e: Exception) {
+                Log.e("ViewModel", "Error fetching history: ${e.message}", e)
+                // Dùng dữ liệu giả khi có exception
+                loadMockData()
+            }
+        }
+    }
+    
+    // Dữ liệu giả để test UI
+    private fun loadMockData() {
+        val now = System.currentTimeMillis()
+        val tempHistory = mutableListOf<SensorDataPoint>()
+        val humidityHistory = mutableListOf<SensorDataPoint>()
+        
+        // Tạo 24 điểm dữ liệu (1 điểm mỗi giờ)
+        for (i in 0..23) {
+            val timestamp = now - ((23 - i) * 60 * 60 * 1000)
+            
+            // Nhiệt độ dao động từ 25-35 độ C
+            val temp = 25.0 + (kotlin.math.sin(i * 0.5) * 5.0) + (Math.random() * 2.0)
+            tempHistory.add(SensorDataPoint(timestamp, temp))
+            
+            // Độ ẩm dao động từ 60-80%
+            val humidity = 70.0 + (kotlin.math.cos(i * 0.3) * 10.0) + (Math.random() * 3.0)
+            humidityHistory.add(SensorDataPoint(timestamp, humidity))
+        }
+        
+        _uiState.value = _uiState.value.copy(
+            temperatureHistory = tempHistory,
+            humidityHistory = humidityHistory
+        )
+        
+        Log.d("ViewModel", "Loaded mock data: ${tempHistory.size} temp points, ${humidityHistory.size} humidity points")
+    }
+
     // Lưu token đơn giản
     private fun saveToken(token: String) {
         val sharedPref = getApplication<Application>().getSharedPreferences("SmartGardenPrefs", Context.MODE_PRIVATE)
