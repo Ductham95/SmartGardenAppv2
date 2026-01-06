@@ -18,6 +18,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val client = OkHttpClient()
     private var webSocket: WebSocket? = null
+    private val notificationHelper = NotificationHelper(application)
+    
+    // Track last alert time để tránh spam notifications
+    private var lastAlertTimes = mutableMapOf<AlertType, Long>()
+    private val ALERT_COOLDOWN_MS = 5 * 60 * 1000L // 5 phút
 
     // ID thiết bị và Token (được lưu sau khi login)
     // Lưu ý: Device ID lấy từ ThingsBoard, không phải Access Token trong code ESP32
@@ -105,9 +110,82 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 batteryLevel = getValue("batteryLevel") ?: _uiState.value.batteryLevel,
                 isPumpOn = (getValue("pumpState") ?: 0f) == 1f // pumpState gửi lên là 1 hoặc 0 (true/false)
             )
+            
+            // Kiểm tra và gửi cảnh báo
+            checkAndSendAlerts()
         } catch (e: Exception) {
             Log.e("ViewModel", "Parse Error: ${e.message}")
         }
+    }
+    
+    // Kiểm tra ngưỡng và gửi cảnh báo
+    private fun checkAndSendAlerts() {
+        val state = _uiState.value
+        val settings = state.alertSettings
+        val activeAlerts = mutableListOf<AlertType>()
+        val currentTime = System.currentTimeMillis()
+        
+        // Kiểm tra độ ẩm đất
+        if (settings.soilMoistureEnabled && state.soilMoisture < settings.soilMoistureThreshold) {
+            activeAlerts.add(AlertType.SOIL_MOISTURE_LOW)
+            if (shouldSendNotification(AlertType.SOIL_MOISTURE_LOW, currentTime)) {
+                notificationHelper.sendSoilMoistureAlert(state.soilMoisture, settings.soilMoistureThreshold)
+                lastAlertTimes[AlertType.SOIL_MOISTURE_LOW] = currentTime
+            }
+        }
+        
+        // Kiểm tra mực nước
+        if (settings.waterLevelEnabled && state.tankWaterLevel < settings.waterLevelThreshold) {
+            activeAlerts.add(AlertType.WATER_LEVEL_LOW)
+            if (shouldSendNotification(AlertType.WATER_LEVEL_LOW, currentTime)) {
+                notificationHelper.sendWaterLevelAlert(state.tankWaterLevel, settings.waterLevelThreshold)
+                lastAlertTimes[AlertType.WATER_LEVEL_LOW] = currentTime
+            }
+        }
+        
+        // Kiểm tra nhiệt độ
+        if (settings.temperatureEnabled) {
+            if (state.temperature > settings.temperatureMaxThreshold) {
+                activeAlerts.add(AlertType.TEMPERATURE_HIGH)
+                if (shouldSendNotification(AlertType.TEMPERATURE_HIGH, currentTime)) {
+                    notificationHelper.sendTemperatureAlert(
+                        state.temperature,
+                        settings.temperatureMinThreshold,
+                        settings.temperatureMaxThreshold,
+                        isHigh = true
+                    )
+                    lastAlertTimes[AlertType.TEMPERATURE_HIGH] = currentTime
+                }
+            } else if (state.temperature < settings.temperatureMinThreshold) {
+                activeAlerts.add(AlertType.TEMPERATURE_LOW)
+                if (shouldSendNotification(AlertType.TEMPERATURE_LOW, currentTime)) {
+                    notificationHelper.sendTemperatureAlert(
+                        state.temperature,
+                        settings.temperatureMinThreshold,
+                        settings.temperatureMaxThreshold,
+                        isHigh = false
+                    )
+                    lastAlertTimes[AlertType.TEMPERATURE_LOW] = currentTime
+                }
+            }
+        }
+        
+        // Kiểm tra pin
+        if (settings.batteryEnabled && state.batteryLevel > 0 && state.batteryLevel < settings.batteryThreshold) {
+            activeAlerts.add(AlertType.BATTERY_LOW)
+            if (shouldSendNotification(AlertType.BATTERY_LOW, currentTime)) {
+                notificationHelper.sendBatteryAlert(state.batteryLevel, settings.batteryThreshold)
+                lastAlertTimes[AlertType.BATTERY_LOW] = currentTime
+            }
+        }
+        
+        // Cập nhật active alerts
+        _uiState.value = _uiState.value.copy(activeAlerts = activeAlerts)
+    }
+    
+    private fun shouldSendNotification(alertType: AlertType, currentTime: Long): Boolean {
+        val lastTime = lastAlertTimes[alertType] ?: 0L
+        return (currentTime - lastTime) > ALERT_COOLDOWN_MS
     }
 
     // --- Điều khiển Bơm (RPC) ---

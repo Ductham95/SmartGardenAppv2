@@ -27,6 +27,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import com.example.smartgardenapp.AlertType
+import com.example.smartgardenapp.GardenState
 import com.example.smartgardenapp.MainViewModel
 import com.example.smartgardenapp.SensorDataPoint
 import com.example.smartgardenapp.ui.components.*
@@ -483,6 +485,24 @@ fun DashboardScreen(viewModel: MainViewModel, navController: NavController) {
             }
 
             Spacer(modifier = Modifier.height(24.dp))
+            
+            // Alert Banners Section
+            if (state.activeAlerts.isNotEmpty()) {
+                AnimatedVisibility(
+                    visible = visible,
+                    enter = fadeIn(tween(600, delayMillis = 250)) + slideInVertically(tween(600, delayMillis = 250)) { 30 }
+                ) {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        state.activeAlerts.forEach { alertType ->
+                            AlertBanner(alertType = alertType, state = state)
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(24.dp))
+            }
 
             // Control Section
             Text(
@@ -956,3 +976,90 @@ fun StatisticRow(
         )
     }
 }
+
+// Alert Banner Component
+@Composable
+fun AlertBanner(alertType: AlertType, state: GardenState) {
+    val (icon, title, message, color) = when (alertType) {
+        AlertType.SOIL_MOISTURE_LOW -> Tuple4(
+            Icons.Default.Grass,
+            "Độ ẩm đất thấp",
+            "Độ ẩm đất hiện tại ${String.format("%.0f", state.soilMoisture)}%, thấp hơn ngưỡng ${String.format("%.0f", state.alertSettings.soilMoistureThreshold)}%",
+            SoilMoistureColor
+        )
+        AlertType.WATER_LEVEL_LOW -> Tuple4(
+            Icons.Default.WaterDrop,
+            "Mực nước thấp",
+            "Mực nước ${String.format("%.0f", state.tankWaterLevel)}%, thấp hơn ngưỡng ${String.format("%.0f", state.alertSettings.waterLevelThreshold)}%",
+            WaterLevelColor
+        )
+        AlertType.TEMPERATURE_HIGH -> Tuple4(
+            Icons.Default.Thermostat,
+            "Nhiệt độ quá cao",
+            "Nhiệt độ ${String.format("%.1f", state.temperature)}°C, cao hơn ngưỡng ${String.format("%.1f", state.alertSettings.temperatureMaxThreshold)}°C",
+            TemperatureColor
+        )
+        AlertType.TEMPERATURE_LOW -> Tuple4(
+            Icons.Default.Thermostat,
+            "Nhiệt độ quá thấp",
+            "Nhiệt độ ${String.format("%.1f", state.temperature)}°C, thấp hơn ngưỡng ${String.format("%.1f", state.alertSettings.temperatureMinThreshold)}°C",
+            TemperatureColor
+        )
+        AlertType.BATTERY_LOW -> Tuple4(
+            Icons.Default.BatteryAlert,
+            "Pin yếu",
+            "Pin còn ${String.format("%.0f", state.batteryLevel)}%, thấp hơn ngưỡng ${String.format("%.0f", state.alertSettings.batteryThreshold)}%",
+            BatteryColor
+        )
+    }
+    
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(8.dp, RoundedCornerShape(16.dp)),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = color.copy(alpha = 0.1f)
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .background(color.copy(alpha = 0.2f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = color,
+                    modifier = Modifier.size(28.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = color
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = message,
+                    fontSize = 13.sp,
+                    color = TextSecondary,
+                    lineHeight = 18.sp
+                )
+            }
+        }
+    }
+}
+
+// Helper data class for alert info
+private data class Tuple4<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
